@@ -1,0 +1,388 @@
+/**
+ * PremiumBottomNav — Production-grade bottom navigation for Sliplly
+ * 
+ * Layout: [Drawer] [Pill with 3 tabs] [Add FAB]
+ * Uses absolute positioning for side buttons, pill centered with flex:1
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  Dimensions,
+  Platform,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
+import { useRouter, usePathname } from 'expo-router';
+import { useTheme } from '../context/ThemeContext';
+import { useDrawer } from '../context/DrawerContext';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Layout constants
+const BAR_MARGIN = 16;
+const SIDE_BUTTON_SIZE = 44;
+const PILL_HEIGHT = 52;
+const PILL_PADDING = 5;
+const PILL_GAP = 12;
+const FAB_SIZE = 48;
+const TAB_COUNT = 3;
+const GRADIENT_HEIGHT = 160;
+const BOTTOM_OFFSET = 12;
+
+// Tab width calculation - use full pill width divided by 3
+const PILL_WIDTH = SCREEN_WIDTH - (BAR_MARGIN * 2) - SIDE_BUTTON_SIZE - FAB_SIZE - (PILL_GAP * 2);
+const TAB_WIDTH = (PILL_WIDTH - (PILL_PADDING * 2)) / TAB_COUNT;
+
+const SPRING = {
+  press: { stiffness: 500, damping: 25, mass: 0.8 },
+  slider: { stiffness: 280, damping: 26, mass: 1 },
+  fab: { stiffness: 400, damping: 18, mass: 0.7 },
+  rotation: { stiffness: 300, damping: 20, mass: 0.8 },
+  navBar: { stiffness: 200, damping: 25, mass: 1 },
+};
+
+type TabName = 'dashboard' | 'trips' | 'calendar';
+
+const TABS = [
+  { name: 'dashboard' as TabName, icon: 'grid-outline', iconFocused: 'grid' },
+  { name: 'trips' as TabName, icon: 'car-outline', iconFocused: 'car' },
+  { name: 'calendar' as TabName, icon: 'calendar-outline', iconFocused: 'calendar' },
+];
+
+function getTabIndex(routeName: string): number {
+  if (routeName === 'dashboard') return 0;
+  if (routeName === 'trips') return 1;
+  if (routeName === 'calendar') return 2;
+  return 0;
+}
+
+// ─── Drawer Button ─────────────────────────────────────────────────
+function DrawerButton({ isDark }: { isDark: boolean }) {
+  const { openDrawer } = useDrawer();
+  const scale = useSharedValue(1);
+  const borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+
+  const handlePressIn = useCallback(() => { scale.value = withSpring(0.88, SPRING.press); }, []);
+  const handlePressOut = useCallback(() => {
+    scale.value = withSpring(1, SPRING.press);
+    openDrawer();
+  }, [openDrawer]);
+
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  return (
+    <Animated.View style={animStyle}>
+      <Pressable onPressIn={handlePressIn} onPressOut={handlePressOut}>
+        <BlurView
+          intensity={isDark ? 15 : 40}
+          tint={isDark ? 'dark' : 'light'}
+          experimentalBlurMethod="dimezisBlurView"
+          style={[styles.sideButton, { borderColor }]}
+        >
+          <Ionicons name="menu" size={20} color={isDark ? '#FFF' : '#1A1A1A'} />
+        </BlurView>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ─── Add Button ────────────────────────────────────────────────────
+function AddButton({ isDark, isBookingPage, onNavigate }: { isDark: boolean; isBookingPage: boolean; onNavigate: (route: string) => void }) {
+  const scale = useSharedValue(1);
+  const rotation = useSharedValue(isBookingPage ? 45 : 0);
+
+  useEffect(() => {
+    rotation.value = withSpring(isBookingPage ? 45 : 0, SPRING.rotation);
+  }, [isBookingPage]);
+
+  const handlePressIn = useCallback(() => { scale.value = withSpring(0.85, SPRING.fab); }, []);
+  const handlePressOut = useCallback(() => {
+    scale.value = withSpring(1, SPRING.fab);
+    if (isBookingPage) onNavigate('back');
+    else onNavigate('booking');
+  }, [isBookingPage, onNavigate]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }, { rotate: `${rotation.value}deg` }],
+  }));
+
+  const colors: [string, string] = isDark ? ['#4ADE80', '#22C55E'] : ['#2D6A4F', '#1B4332'];
+
+  return (
+    <Animated.View style={animStyle}>
+      <Pressable onPressIn={handlePressIn} onPressOut={handlePressOut}>
+        <LinearGradient
+          colors={colors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={[styles.fab, { shadowColor: isDark ? '#22C55E' : '#2D6A4F', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 16, elevation: 10 }]}
+        >
+          <Ionicons name="add" size={24} color="#FFFFFF" />
+        </LinearGradient>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ─── Main Bottom Navigation ────────────────────────────────────────
+export default function PremiumBottomNav() {
+  const insets = useSafeAreaInsets();
+  const { isDark } = useTheme();
+  const router = useRouter();
+  const pathname = usePathname();
+  
+  // Get current route from pathname
+  const activeRouteName = useMemo(() => {
+    if (pathname.includes('dashboard')) return 'dashboard';
+    if (pathname.includes('trips')) return 'trips';
+    if (pathname.includes('calendar')) return 'calendar';
+    if (pathname.includes('booking')) return 'booking';
+    return 'dashboard';
+  }, [pathname]);
+  const isBookingPage = activeRouteName === 'booking';
+  
+  // Slider animation - keep position when on booking page
+  const sliderX = useSharedValue(getTabIndex(activeRouteName));
+  const sliderScaleX = useSharedValue(1);
+  const sliderScaleY = useSharedValue(1);
+  const lastTabIndex = useRef(getTabIndex(activeRouteName));
+  
+  useEffect(() => {
+    const newIndex = getTabIndex(activeRouteName);
+    // Only update slider for main tabs, not booking
+    if (activeRouteName !== 'booking') {
+      // Stretch horizontally, squeeze vertically
+      sliderScaleX.value = withSpring(1.15, { stiffness: 400, damping: 15, mass: 0.5 });
+      sliderScaleY.value = withSpring(0.85, { stiffness: 400, damping: 15, mass: 0.5 });
+      
+      setTimeout(() => {
+        // Return to normal
+        sliderScaleX.value = withSpring(1, { stiffness: 300, damping: 20, mass: 0.8 });
+        sliderScaleY.value = withSpring(1, { stiffness: 300, damping: 20, mass: 0.8 });
+      }, 100);
+      
+      lastTabIndex.current = newIndex;
+    }
+    sliderX.value = withSpring(lastTabIndex.current, SPRING.slider);
+  }, [activeRouteName]);
+
+  const sliderStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: sliderX.value * TAB_WIDTH },
+      { scaleX: sliderScaleX.value },
+      { scaleY: sliderScaleY.value },
+    ],
+  }));
+
+  const handleTabPress = useCallback((tabName: TabName) => {
+    router.push(`/(tabs)/${tabName}`);
+  }, [router]);
+
+  const handleNavigate = useCallback((route: string) => {
+    if (route === 'back') router.back();
+    else router.push(`/(tabs)/${route}`);
+  }, [router]);
+
+  // Nav bar hide animation for booking page
+  const navBarTranslateY = useSharedValue(0);
+  useEffect(() => {
+    navBarTranslateY.value = withSpring(
+      isBookingPage ? 200 : 0,
+      SPRING.navBar
+    );
+  }, [isBookingPage]);
+
+  const navBarStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: navBarTranslateY.value }],
+  }));
+
+  // Gradient colors - smooth transition with 6 stops (no locations prop)
+  const gradientColors: [string, string, string, string, string, string] = isDark
+    ? ['transparent', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.85)']
+    : ['transparent', 'rgba(0,0,0,0.02)', 'rgba(0,0,0,0.05)', 'rgba(0,0,0,0.08)', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.18)'];
+
+  const activeColor = isDark ? '#FFFFFF' : '#1A1A1A';
+  const inactiveColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.35)';
+  const sliderBg = isDark ? '#2A2A2A' : '#E0E0E0';
+
+  return (
+    <View style={styles.container}>
+      {/* Gradient from screen bottom */}
+      <LinearGradient
+        colors={gradientColors}
+        style={[styles.gradient, { height: insets.bottom + GRADIENT_HEIGHT }]}
+        pointerEvents="none"
+      />
+
+      {/* Navigation bar - hides on booking page */}
+      <Animated.View style={[styles.navBar, { bottom: insets.bottom + BOTTOM_OFFSET }, navBarStyle]}>
+        {/* Center: Pill (centered in container) */}
+        <View style={styles.pillWrapper}>
+          {/* Layer 1: Blur background */}
+          <BlurView
+            intensity={isDark ? 15 : 40}
+            tint={isDark ? 'dark' : 'light'}
+            experimentalBlurMethod="dimezisBlurView"
+            style={StyleSheet.absoluteFill}
+          />
+          {/* Layer 2: Border */}
+          <View style={[styles.pillBorder, { borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]} />
+          {/* Layer 3: Opaque slider (blur won't show through) */}
+          <Animated.View style={[styles.slider, sliderStyle, { backgroundColor: sliderBg }]} />
+          {/* Layer 4: Tabs */}
+          <View style={styles.pillTabs}>
+            {TABS.map((tab) => {
+              const isActive = getTabIndex(activeRouteName) === TABS.indexOf(tab);
+              return (
+                <Pressable
+                  key={tab.name}
+                  style={styles.pillTab}
+                  onPress={() => handleTabPress(tab.name)}
+                >
+                  {isActive ? (
+                    <Animated.Text style={[styles.pillLabel, { color: activeColor }]}>
+                      {tab.name.charAt(0).toUpperCase() + tab.name.slice(1)}
+                    </Animated.Text>
+                  ) : (
+                    <Ionicons
+                      name={tab.icon as any}
+                      size={18}
+                      color={inactiveColor}
+                    />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Left: Drawer button (absolute positioned) */}
+        <View style={styles.leftButton}>
+          <DrawerButton isDark={isDark} />
+        </View>
+
+        {/* Right: Add button (absolute positioned) */}
+        <View style={styles.rightButton}>
+          <AddButton isDark={isDark} isBookingPage={isBookingPage} onNavigate={handleNavigate} />
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100,
+    pointerEvents: 'box-none',
+  },
+  gradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1,
+  },
+  navBar: {
+    position: 'absolute',
+    left: BAR_MARGIN,
+    right: BAR_MARGIN,
+    height: PILL_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  leftButton: {
+    position: 'absolute',
+    left: 0,
+    width: SIDE_BUTTON_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rightButton: {
+    position: 'absolute',
+    right: 0,
+    width: FAB_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sideButton: {
+    width: SIDE_BUTTON_SIZE,
+    height: SIDE_BUTTON_SIZE,
+    borderRadius: SIDE_BUTTON_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6 },
+      android: { elevation: 4 },
+      default: {},
+    }),
+  },
+  pillWrapper: {
+    height: PILL_HEIGHT,
+    borderRadius: PILL_HEIGHT / 2,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8 },
+      android: { elevation: 6 },
+      default: {},
+    }),
+  },
+  pillBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: PILL_HEIGHT / 2,
+    borderWidth: 1,
+    zIndex: 1,
+  },
+  slider: {
+    position: 'absolute',
+    top: PILL_PADDING,
+    left: PILL_PADDING / 2,
+    width: TAB_WIDTH - PILL_PADDING,
+    height: PILL_HEIGHT - (PILL_PADDING * 2),
+    borderRadius: (PILL_HEIGHT - (PILL_PADDING * 2)) / 2,
+    zIndex: 2,
+  },
+  pillTabs: {
+    flexDirection: 'row',
+    flex: 1,
+    zIndex: 3,
+  },
+  pillTab: {
+    width: TAB_WIDTH,
+    height: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingHorizontal: 2,
+    overflow: 'hidden',
+  },
+  pillLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  fab: {
+    width: FAB_SIZE,
+    height: FAB_SIZE,
+    borderRadius: FAB_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

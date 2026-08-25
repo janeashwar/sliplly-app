@@ -85,6 +85,7 @@ function SwipeableTabContent({ children }: { children: React.ReactNode }) {
 
 export default function TabLayout() {
   const pathname = usePathname();
+  const { colors } = useTheme();
   const currentIndex = useMemo(() => getTabIndex(pathname), [pathname]);
   const [prevIndex, setPrevIndex] = useState(currentIndex);
   const [direction, setDirection] = useState<'left' | 'right' | 'none'>('none');
@@ -109,6 +110,7 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         animation: 'none',
+        sceneStyle: { backgroundColor: colors.bg.base },
       }}
     >
       <Tabs.Screen name="dashboard" />

@@ -5,10 +5,10 @@
  * the content slides in from the appropriate direction with a fade.
  *
  * Direction is determined by comparing the current tab index to the
- * previous tab: going right → slide from right, going left → slide from left.
+ * previous tab: going right → settle from right, going left → from left.
  *
- * Full-width slide with smooth ease — matches the stack pages'
- * slide_from_right animation. ~220ms total.
+ * Nudge-settle: content is fully opaque and on-screen from the first
+ * frame (no flash), sliding a small distance into place. ~240ms.
  */
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Dimensions } from 'react-native';
@@ -36,10 +36,11 @@ let globalPrevTabIndex = 0;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Full-width slide — matches the stack pages' slide_from_right feel
-const SLIDE_DISTANCE = SCREEN_WIDTH;
-const SLIDE_DURATION = 220; // ms — close to the stack's 200ms
-const FADE_DURATION = 180;
+// Direction-aware settle: content is visible from the first frame (no
+// blank/flash gap). A full offscreen slide always flashes because the
+// navigator hides the old tab instantly — so we nudge-settle instead.
+const SLIDE_DISTANCE = Math.min(SCREEN_WIDTH * 0.08, 48);
+const SLIDE_DURATION = 240;
 
 interface TabScreenTransitionProps {
   tabIndex: number;
@@ -53,7 +54,6 @@ export default function TabScreenTransition({ tabIndex, children }: TabScreenTra
   const isActive = currentTabIndex === tabIndex;
 
   const translateX = useSharedValue(0);
-  const opacity = useSharedValue(0);
   const hasAnimated = useRef(false);
 
   useEffect(() => {
@@ -63,25 +63,17 @@ export default function TabScreenTransition({ tabIndex, children }: TabScreenTra
       const isSameTab = tabIndex === globalPrevTabIndex;
 
       if (!isSameTab) {
-        // Start offscreen
+        // Start just off-direction, fully opaque — content on screen at frame 0
         translateX.value = direction * SLIDE_DISTANCE;
-        opacity.value = 0;
 
-        // Animate in — smooth ease like the stack's slide_from_right
+        // Settle into place — smooth ease
         translateX.value = withTiming(0, {
           duration: SLIDE_DURATION,
           easing: Easing.out(Easing.cubic),
         });
-        opacity.value = withTiming(1, {
-          duration: FADE_DURATION,
-          easing: Easing.out(Easing.cubic),
-        });
       } else {
-        // First mount, just fade in
-        opacity.value = withTiming(1, {
-          duration: FADE_DURATION,
-          easing: Easing.out(Easing.cubic),
-        });
+        // First mount, no motion needed
+        translateX.value = 0;
       }
 
       hasAnimated.current = true;
@@ -98,15 +90,18 @@ export default function TabScreenTransition({ tabIndex, children }: TabScreenTra
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
-    opacity: opacity.value,
   }));
 
   if (!isActive) return null;
 
   return (
-    <Animated.View style={[styles.container, animatedStyle, { backgroundColor: colors.bg.base }]}>
-      {children}
-    </Animated.View>
+    /* Opaque outer shell — always the page background color, so the
+       first frames of the slide never reveal a white flash behind */
+    <View style={[styles.container, { backgroundColor: colors.bg.base }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>
+        {children}
+      </Animated.View>
+    </View>
   );
 }
 

@@ -7,14 +7,14 @@
  * Direction is determined by comparing the current tab index to the
  * previous tab: going right → slide from right, going left → slide from left.
  *
- * Uses spring animation for natural feel. ~350ms total.
+ * Full-width slide with smooth ease — matches the stack pages'
+ * slide_from_right animation. ~220ms total.
  */
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, Dimensions } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withTiming,
   Easing,
 } from 'react-native-reanimated';
@@ -34,16 +34,12 @@ function getTabIndex(pathname: string): number {
 // Global ref to track previous tab index across all instances
 let globalPrevTabIndex = 0;
 
-// Spring config for natural slide
-const SPRING = {
-  stiffness: 300,
-  damping: 30,
-  mass: 0.9,
-  overshootClamping: false,
-};
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const SLIDE_DISTANCE = 80; // Subtle slide, not full screen width
-const FADE_DURATION = 200;
+// Full-width slide — matches the stack pages' slide_from_right feel
+const SLIDE_DISTANCE = SCREEN_WIDTH;
+const SLIDE_DURATION = 220; // ms — close to the stack's 200ms
+const FADE_DURATION = 180;
 
 interface TabScreenTransitionProps {
   tabIndex: number;
@@ -71,8 +67,11 @@ export default function TabScreenTransition({ tabIndex, children }: TabScreenTra
         translateX.value = direction * SLIDE_DISTANCE;
         opacity.value = 0;
 
-        // Animate in
-        translateX.value = withSpring(0, SPRING);
+        // Animate in — smooth ease like the stack's slide_from_right
+        translateX.value = withTiming(0, {
+          duration: SLIDE_DURATION,
+          easing: Easing.out(Easing.cubic),
+        });
         opacity.value = withTiming(1, {
           duration: FADE_DURATION,
           easing: Easing.out(Easing.cubic),

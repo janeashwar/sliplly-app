@@ -39,8 +39,9 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // Direction-aware settle: content is visible from the first frame (no
 // blank/flash gap). A full offscreen slide always flashes because the
 // navigator hides the old tab instantly — so we nudge-settle instead.
-const SLIDE_DISTANCE = Math.min(SCREEN_WIDTH * 0.08, 48);
-const SLIDE_DURATION = 240;
+// Kept short so the switch feels instant, not sluggish.
+const SLIDE_DISTANCE = Math.min(SCREEN_WIDTH * 0.06, 36);
+const SLIDE_DURATION = 180;
 
 interface TabScreenTransitionProps {
   tabIndex: number;

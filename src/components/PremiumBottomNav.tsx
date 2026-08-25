@@ -19,6 +19,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
+  withSequence,
   Easing,
 } from 'react-native-reanimated';
 import { useRouter, usePathname } from 'expo-router';
@@ -164,16 +165,29 @@ export default function PremiumBottomNav() {
   
   // Slider animation - keep position when on booking page
   const sliderX = useSharedValue(getTabIndex(activeRouteName));
+  const sliderScaleX = useSharedValue(1);
+  const sliderScaleY = useSharedValue(1);
   const lastTabIndex = useRef(getTabIndex(activeRouteName));
   
   useEffect(() => {
     const newIndex = getTabIndex(activeRouteName);
-    // Smooth slide to the new tab — no squash/timeout tricks (they flicker)
     if (activeRouteName !== 'booking') {
+      if (newIndex !== lastTabIndex.current) {
+        // Bouncy squash-stretch while sliding — one UI-thread chain,
+        // no setTimeout (that raced the springs and flickered)
+        sliderScaleX.value = withSequence(
+          withTiming(1.12, { duration: 90, easing: Easing.out(Easing.quad) }),
+          withTiming(1, { duration: 140, easing: Easing.out(Easing.quad) })
+        );
+        sliderScaleY.value = withSequence(
+          withTiming(0.88, { duration: 90, easing: Easing.out(Easing.quad) }),
+          withTiming(1, { duration: 140, easing: Easing.out(Easing.quad) })
+        );
+      }
       lastTabIndex.current = newIndex;
     }
     sliderX.value = withTiming(lastTabIndex.current, {
-      duration: 200,
+      duration: 180,
       easing: Easing.out(Easing.cubic),
     });
   }, [activeRouteName]);
@@ -181,6 +195,8 @@ export default function PremiumBottomNav() {
   const sliderStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: sliderX.value * TAB_WIDTH },
+      { scaleX: sliderScaleX.value },
+      { scaleY: sliderScaleY.value },
     ],
   }));
 

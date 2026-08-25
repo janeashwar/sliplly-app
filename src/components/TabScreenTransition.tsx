@@ -1,16 +1,16 @@
 /**
- * TabScreenTransition — Wraps each tab screen to animate entry/exit
+ * TabScreenTransition — Wraps each tab screen for page-to-page motion
  *
- * Each tab screen wraps its content with this component. On mount,
- * the content slides in from the appropriate direction with a fade.
+ * Nudge-settle: on tab change the incoming screen is fully opaque and
+ * settles a small distance into place (direction-aware), so there is no
+ * blank frame / flash.
  *
- * Direction is determined by comparing the current tab index to the
- * previous tab: going right → settle from right, going left → from left.
- *
- * Nudge-settle: content is fully opaque and on-screen from the first
- * frame (no flash), sliding a small distance into place. ~240ms.
+ * The shell stays MOUNTED for the whole app session (hidden via display
+ * when inactive). This keeps scroll positions, avoids remount jank on
+ * low-end phones, and means entrance animations (FadeInDown etc.) play
+ * only on first mount — never again on every visit.
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useLayoutEffect } from 'react';
 import { StyleSheet, View, Dimensions } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -31,7 +31,7 @@ function getTabIndex(pathname: string): number {
   return 0;
 }
 
-// Global ref to track previous tab index across all instances
+// Global tracker for direction across all tab instances
 let globalPrevTabIndex = 0;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -54,51 +54,41 @@ export default function TabScreenTransition({ tabIndex, children }: TabScreenTra
   const isActive = currentTabIndex === tabIndex;
 
   const translateX = useSharedValue(0);
-  const hasAnimated = useRef(false);
 
-  useEffect(() => {
-    if (isActive && !hasAnimated.current) {
-      // Determine direction
+  // useLayoutEffect — applies the offset BEFORE the frame paints, so the
+  // settle never starts a frame late (that late start read as a glitch).
+  useLayoutEffect(() => {
+    if (!isActive) return;
+
+    if (tabIndex === globalPrevTabIndex) {
+      // First screen at app open — no motion
+      translateX.value = 0;
+    } else {
       const direction = tabIndex > globalPrevTabIndex ? 1 : -1;
-      const isSameTab = tabIndex === globalPrevTabIndex;
-
-      if (!isSameTab) {
-        // Start just off-direction, fully opaque — content on screen at frame 0
-        translateX.value = direction * SLIDE_DISTANCE;
-
-        // Settle into place — smooth ease
-        translateX.value = withTiming(0, {
-          duration: SLIDE_DURATION,
-          easing: Easing.out(Easing.cubic),
-        });
-      } else {
-        // First mount, no motion needed
-        translateX.value = 0;
-      }
-
-      hasAnimated.current = true;
-      globalPrevTabIndex = tabIndex;
+      translateX.value = direction * SLIDE_DISTANCE;
+      translateX.value = withTiming(0, {
+        duration: SLIDE_DURATION,
+        easing: Easing.out(Easing.cubic),
+      });
     }
+    globalPrevTabIndex = tabIndex;
   }, [isActive, tabIndex]);
-
-  // Reset when becoming inactive
-  useEffect(() => {
-    if (!isActive) {
-      hasAnimated.current = false;
-    }
-  }, [isActive]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
 
-  if (!isActive) return null;
-
+  // Always mounted — hidden when inactive. Keeps scroll position, prevents
+  // remount jank, stops entrance animations replaying on every visit.
   return (
-    /* Opaque outer shell — always the page background color, so the
-       first frames of the slide never reveal a white flash behind */
-    <View style={[styles.container, { backgroundColor: colors.bg.base }]}>
-      <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: colors.bg.base, display: isActive ? 'flex' : 'none' },
+      ]}
+      pointerEvents={isActive ? 'auto' : 'none'}
+    >
+      <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]} collapsable={false}>
         {children}
       </Animated.View>
     </View>

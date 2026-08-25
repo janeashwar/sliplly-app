@@ -22,7 +22,7 @@ interface CachedImageProps {
   priority?: 'low' | 'normal' | 'high';
   recyclingKey?: string;
   onLoad?: () => void;
-  onError?: (error: Error) => void;
+  onError?: (event: Parameters<NonNullable<React.ComponentProps<typeof Image>['onError']>>[0]) => void;
 }
 
 export default function CachedImage({

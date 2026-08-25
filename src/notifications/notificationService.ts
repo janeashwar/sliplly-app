@@ -55,6 +55,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -345,7 +347,7 @@ class NotificationService {
         },
         sound: this._preferences.sound ? 'default' : undefined,
       },
-      trigger: { date: triggerDate },
+      trigger: { type: 'date', date: triggerDate } as any,
     });
   }
 

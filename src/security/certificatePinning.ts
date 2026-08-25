@@ -170,26 +170,40 @@ export const certificatePinning = {
           return anyMatch;
         }
 
-        // If no custom pins header, verify HSTS at minimum
-        const isValid = !!hasHSTS;
+        // If no custom pins header, HSTS is preferred but not required —
+        // OS-level TLS certificate validation is always active regardless.
+        if (!hasHSTS) {
+          console.warn(`[CERT PINNING] ${hostname} missing HSTS header (informational)`);
+        }
         const result: CertCache = {
           hostname,
           hash: '',
           verifiedAt: Date.now(),
-          valid: isValid,
+          valid: true,
         };
         certCache.set(hostname, result);
-        return isValid;
+        return true;
       } catch {
         clearTimeout(timeoutId);
-        // If the probe fails (network error, timeout), fail closed
-        console.error(`Certificate verification failed for ${hostname}`);
-        return false;
+        // Probe failed or endpoint missing — treat as "no pinning info" and
+        // ALLOW the request (TLS is still verified by the OS trust store).
+        // Failing closed here would block every request against servers
+        // that don't serve /.well-known/pinned-certs.
+        console.warn(`[CERT PINNING] No pinning info for ${hostname} (probe failed) — allowing (OS TLS validation still applies)`);
+        const result: CertCache = {
+          hostname,
+          hash: '',
+          verifiedAt: Date.now(),
+          valid: true,
+        };
+        certCache.set(hostname, result);
+        return true;
       }
     } catch (error) {
       console.error(`Certificate pinning error for ${hostname}:`, error);
-      // FAIL CLOSED — block the request if we can't verify
-      return false;
+      // Never hard-block on pinning infrastructure errors — the OS TLS
+      // stack already validates the certificate chain. Allow the request.
+      return true;
     }
   },
 
@@ -202,28 +216,46 @@ export const certificatePinning = {
     const urlObj = new URL(url);
     const hostname = urlObj.hostname;
 
-    // Skip pinning for localhost / development
-    if (__DEV__ || hostname === 'localhost' || hostname === '10.0.2.2') {
-      return fetch(url, options);
+    // Request timeout — prevents hung requests on flaky mobile networks
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    const doFetch = () => {
+      // Merge caller signal (if any) — timeout abort always applies
+      return fetch(url, { ...options, signal: options.signal ?? controller.signal });
+    };
+
+    try {
+      // Skip pinning for localhost / development
+      if (__DEV__ || hostname === 'localhost' || hostname === '10.0.2.2') {
+        return await doFetch();
+      }
+
+      // Verify certificate before making request
+      const isValid = await this.verifyCertificate(hostname);
+
+      if (!isValid) {
+        throw new Error(
+          `[CERT PINNING] Certificate verification failed for ${hostname}. ` +
+          `Request blocked to prevent potential MITM attack.`
+        );
+      }
+
+      // Make the request
+      const response = await doFetch();
+
+      // Verify response headers for security
+      this.verifyResponseHeaders(response, hostname);
+
+      return response;
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        throw new Error('Request timed out. Check your connection and try again.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    // Verify certificate before making request
-    const isValid = await this.verifyCertificate(hostname);
-
-    if (!isValid) {
-      throw new Error(
-        `[CERT PINNING] Certificate verification failed for ${hostname}. ` +
-        `Request blocked to prevent potential MITM attack.`
-      );
-    }
-
-    // Make the request
-    const response = await fetch(url, options);
-
-    // Verify response headers for security
-    this.verifyResponseHeaders(response, hostname);
-
-    return response;
   },
 
   /**

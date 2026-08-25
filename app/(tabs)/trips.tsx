@@ -11,6 +11,7 @@ import {
   LayoutChangeEvent,
   RefreshControl,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -513,6 +514,11 @@ export default function TripsScreen() {
         <Animated.FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
+          removeClippedSubviews={Platform.OS === 'android'}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={50}
+          windowSize={7}
+          initialNumToRender={10}
           renderItem={({ item, index }) => (
             <TripCard
               item={item}
@@ -613,6 +619,11 @@ export default function TripsScreen() {
           <Animated.FlatList
             data={filtered}
             keyExtractor={(item) => item.id}
+            removeClippedSubviews={Platform.OS === 'android'}
+            maxToRenderPerBatch={8}
+            updateCellsBatchingPeriod={50}
+            windowSize={7}
+            initialNumToRender={10}
             renderItem={({ item, index }) => (
               <TripCard
                 item={item}

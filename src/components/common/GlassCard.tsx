@@ -1,17 +1,15 @@
 /**
- * GlassCard — Premium glassmorphism card with gradient overlay
+ * GlassCard — Solid surface card (Notion/Linear style)
  *
- * Adds depth and polish with:
- * - Subtle gradient overlay (theme-aware)
- * - Multi-layered warm-tinted shadows for elevation
- * - Optional blur backdrop
- * - No harsh borders — shadows for separation
+ * Formerly a glassmorphism card with LinearGradient + optional BlurView.
+ * Now renders a fully opaque themed surface with a hairline border and
+ * warm-tinted shadow. Same props API, so no call-site changes needed.
+ * Solid colors are cheaper to render than gradients/blur — better for 60fps
+ * on low-end Android devices.
  */
 
 import React from 'react';
 import { View, StyleSheet, ViewStyle, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { useTheme } from '../../context/ThemeContext';
 import { radius } from '../../theme/colors';
 
@@ -19,7 +17,9 @@ interface GlassCardProps {
   children: React.ReactNode;
   style?: ViewStyle;
   variant?: 'default' | 'hero' | 'stat' | 'activity' | 'elevated';
-  intensity?: number; // blur intensity 0-100
+  /** Deprecated: blur was removed. Kept for prop compatibility. */
+  intensity?: number;
+  /** Deprecated: blur was removed. Kept for prop compatibility. */
   showBlur?: boolean;
 }
 
@@ -27,32 +27,11 @@ function GlassCardInner({
   children,
   style,
   variant = 'default',
-  intensity = 20,
-  showBlur = false,
 }: GlassCardProps) {
   const { isDark, colors } = useTheme();
 
-  const gradientColors = getGradientColors(variant, isDark);
-
   return (
-    <View style={[styles.container, getShadow(variant, isDark), style]}>
-      {/* Optional blur backdrop */}
-      {showBlur && (
-        <BlurView
-          intensity={intensity}
-          tint={isDark ? 'dark' : 'light'}
-          style={StyleSheet.absoluteFill}
-        />
-      )}
-
-      {/* Gradient overlay — subtle glassmorphism effect */}
-      <LinearGradient
-        colors={gradientColors}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-
+    <View style={[styles.container, getSurface(variant, colors, isDark), getShadow(variant, isDark), style]}>
       {/* Content */}
       <View style={styles.content}>{children}</View>
     </View>
@@ -61,35 +40,21 @@ function GlassCardInner({
 
 export default React.memo(GlassCardInner);
 
-function getGradientColors(variant: string, isDark: boolean): [string, string, ...string[]] {
-  if (isDark) {
-    // Dark theme: subtle white/transparent wash from top-left
-    switch (variant) {
-      case 'hero':
-        return ['rgba(214,237,106,0.04)', 'rgba(255,255,255,0.01)', 'rgba(0,0,0,0)'];
-      case 'stat':
-        return ['rgba(255,255,255,0.03)', 'rgba(255,255,255,0.01)', 'rgba(0,0,0,0)'];
-      case 'activity':
-        return ['rgba(255,255,255,0.02)', 'rgba(0,0,0,0)'];
-      case 'elevated':
-        return ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)', 'rgba(0,0,0,0)'];
-      default:
-        return ['rgba(255,255,255,0.02)', 'rgba(0,0,0,0)'];
-    }
-  }
+type ThemeColors = ReturnType<typeof useTheme>['colors'];
 
-  // Light theme: warm premium depth gradients
+function getSurface(variant: string, colors: ThemeColors, isDark: boolean): ViewStyle {
+  const base: ViewStyle = {
+    backgroundColor: isDark ? '#1C1C1E' : colors.bg.surface,
+    borderWidth: 1,
+    borderColor: isDark ? '#2C2C2E' : colors.border.subtle,
+  };
+
   switch (variant) {
     case 'hero':
-      return ['rgba(254,254,254,1)', 'rgba(248,247,244,0.95)', 'rgba(243,242,239,0.9)'];
-    case 'stat':
-      return ['rgba(254,254,254,1)', 'rgba(248,247,244,0.97)'];
-    case 'activity':
-      return ['rgba(254,254,254,1)', 'rgba(248,247,244,0.96)'];
-    case 'elevated':
-      return ['rgba(255,255,255,1)', 'rgba(250,249,246,0.97)'];
+      // Hero keeps accent-tinted surface on light theme
+      return { ...base, backgroundColor: isDark ? '#22231D' : colors.bg.surface };
     default:
-      return ['rgba(254,254,254,1)', 'rgba(248,247,244,0.98)'];
+      return base;
   }
 }
 
@@ -149,7 +114,6 @@ const styles = StyleSheet.create({
   container: {
     borderRadius: radius.lg,
     overflow: 'hidden',
-    // No harsh border — shadow provides separation
   },
   content: {
     position: 'relative',

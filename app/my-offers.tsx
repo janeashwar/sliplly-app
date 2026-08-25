@@ -6,6 +6,11 @@ import {
   FlatList,
   Pressable,
   Alert,
+  Modal,
+  TextInput,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { toast } from '../src/utils/toast';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -90,6 +95,8 @@ const STATUS_COLORS: Record<OfferStatus, { bg: string; text: string }> = {
 
 const STATUS_FILTERS: ('All' | OfferStatus)[] = ['All', 'Active', 'Expired', 'Completed'];
 
+const CAB_TYPES = ['Sedan', 'Hatchback', 'SUV', 'Tempo Traveller'];
+
 export default function MyOffersScreen() {
   const { colors, isDark, shadows } = useTheme();
   const styles = getStyles(colors, isDark, shadows);
@@ -98,6 +105,58 @@ export default function MyOffersScreen() {
 
   const [activeFilter, setActiveFilter] = useState<'All' | OfferStatus>('All');
   const [offers, setOffers] = useState<MyOffer[]>(MOCK_MY_OFFERS);
+
+  // Create-offer sheet state
+  const [showCreate, setShowCreate] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    from: '',
+    to: '',
+    date: '',
+    price: '',
+    seats: '4',
+    cabType: 'Sedan',
+    description: '',
+  });
+
+  const openCreate = () => {
+    setForm({ from: '', to: '', date: '', price: '', seats: '4', cabType: 'Sedan', description: '' });
+    setFormError(null);
+    setShowCreate(true);
+  };
+
+  const submitCreate = () => {
+    if (!form.from.trim() || !form.to.trim()) {
+      setFormError('Pickup and drop locations are required.');
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.date.trim())) {
+      setFormError('Enter the date as YYYY-MM-DD.');
+      return;
+    }
+    const priceNum = Number(form.price);
+    if (!form.price.trim() || Number.isNaN(priceNum) || priceNum <= 0) {
+      setFormError('Enter a valid price.');
+      return;
+    }
+    const seatsNum = Math.max(1, Math.min(50, Number(form.seats) || 4));
+    setOffers((prev) => [
+      {
+        id: `local-${Date.now()}`,
+        from: form.from.trim(),
+        to: form.to.trim(),
+        date: form.date.trim(),
+        price: priceNum,
+        seats: seatsNum,
+        cabType: form.cabType,
+        description: form.description.trim() || `${form.cabType} trip from ${form.from.trim()} to ${form.to.trim()}.`,
+        status: 'Active' as OfferStatus,
+      },
+      ...prev,
+    ]);
+    setShowCreate(false);
+    toast.success('Your offer is now live.', 'Offer Created');
+  };
 
   const filtered = activeFilter === 'All'
     ? offers
@@ -271,11 +330,124 @@ export default function MyOffersScreen() {
       <Animated.View entering={FadeInDown.delay(400).duration(400)} style={[styles.fab, { bottom: insets.bottom + 24 }]}>
         <Pressable
           style={styles.fabInner}
-          onPress={() => toast.info('Create new offer form coming soon!', 'Create Offer')}
+          onPress={openCreate}
         >
           <Ionicons name="add-outline" size={28} color={colors.text.inverse} />
         </Pressable>
       </Animated.View>
+
+      {/* Create Offer Sheet */}
+      <Modal visible={showCreate} transparent animationType="slide" onRequestClose={() => setShowCreate(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowCreate(false)} />
+          <View style={styles.modalCard}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Post an Offer</Text>
+            <Text style={styles.modalSubtitle}>Publish a route for partners to claim.</Text>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <View style={styles.formField}>
+                <Text style={styles.fieldLabel}>Pickup</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.from}
+                  onChangeText={(v) => setForm((f) => ({ ...f, from: v }))}
+                  placeholder="IGI Airport T3"
+                  placeholderTextColor={colors.text.tertiary}
+                  autoCapitalize="words"
+                />
+              </View>
+              <View style={styles.formField}>
+                <Text style={styles.fieldLabel}>Drop</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.to}
+                  onChangeText={(v) => setForm((f) => ({ ...f, to: v }))}
+                  placeholder="Gurgaon Cyber Hub"
+                  placeholderTextColor={colors.text.tertiary}
+                  autoCapitalize="words"
+                />
+              </View>
+
+              <View style={styles.formRow}>
+                <View style={styles.formField}>
+                  <Text style={styles.fieldLabel}>Date</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={form.date}
+                    onChangeText={(v) => setForm((f) => ({ ...f, date: v }))}
+                    placeholder="2026-08-30"
+                    placeholderTextColor={colors.text.tertiary}
+                    autoCapitalize="none"
+                  />
+                </View>
+                <View style={styles.formField}>
+                  <Text style={styles.fieldLabel}>Price (₹)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={form.price}
+                    onChangeText={(v) => setForm((f) => ({ ...f, price: v }))}
+                    placeholder="1600"
+                    placeholderTextColor={colors.text.tertiary}
+                    keyboardType="number-pad"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.fieldLabel}>Seats</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.seats}
+                  onChangeText={(v) => setForm((f) => ({ ...f, seats: v.replace(/[^0-9]/g, '') }))}
+                  placeholder="4"
+                  placeholderTextColor={colors.text.tertiary}
+                  keyboardType="number-pad"
+                />
+              </View>
+
+              <Text style={styles.fieldLabel}>Cab type</Text>
+              <View style={styles.cabRow}>
+                {CAB_TYPES.map((type) => (
+                  <Pressable
+                    key={type}
+                    onPress={() => setForm((f) => ({ ...f, cabType: type }))}
+                    style={[styles.cabChip, form.cabType === type && styles.cabChipActive]}
+                  >
+                    <Text style={[styles.cabChipText, form.cabType === type && styles.cabChipTextActive]}>
+                      {type}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.fieldLabel}>Notes (optional)</Text>
+                <TextInput
+                  style={[styles.input, styles.notesInput]}
+                  value={form.description}
+                  onChangeText={(v) => setForm((f) => ({ ...f, description: v }))}
+                  placeholder="Airport pickup for corporate client..."
+                  placeholderTextColor={colors.text.tertiary}
+                  multiline
+                  textAlignVertical="top"
+                />
+              </View>
+
+              {formError && <Text style={styles.formError}>{formError}</Text>}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <Pressable style={[styles.modalBtn, styles.modalBtnSecondary]} onPress={() => setShowCreate(false)}>
+                <Text style={styles.modalBtnSecondaryText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={[styles.modalBtn, styles.modalBtnPrimary]} onPress={submitCreate}>
+                <Text style={styles.modalBtnPrimaryText}>Post Offer</Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -399,4 +571,81 @@ const getStyles = (colors: Colors, isDark: boolean, shadows: any) =>
       shadowOffset: { width: 0, height: 4 },
       elevation: 8,
     },
+
+    // ── Create Offer Sheet ──
+    modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+    modalCard: {
+      backgroundColor: colors.bg.base,
+      borderTopLeftRadius: radius.xl,
+      borderTopRightRadius: radius.xl,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.xxl,
+      maxHeight: '85%',
+    },
+    modalHandle: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.border.default,
+      marginBottom: spacing.md,
+    },
+    modalTitle: { ...typography.h3, color: colors.text.primary, fontWeight: '700' },
+    modalSubtitle: { ...typography.caption, color: colors.text.secondary, marginTop: 4, marginBottom: spacing.lg },
+    formRow: { flexDirection: 'row', gap: spacing.md },
+    formField: { flex: 1, marginBottom: spacing.md },
+    fieldLabel: { ...typography.caption, color: colors.text.secondary, fontWeight: '600', marginBottom: 6 },
+    input: {
+      backgroundColor: colors.bg.surface,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      ...typography.body,
+      color: colors.text.primary,
+    },
+    notesInput: { minHeight: 72, paddingTop: spacing.md },
+    cabRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: 6, marginBottom: spacing.sm },
+    cabChip: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.full,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      backgroundColor: colors.bg.surface,
+    },
+    cabChipActive: { borderColor: colors.accent.primary, backgroundColor: colors.accent.dim },
+    cabChipText: { ...typography.caption, color: colors.text.secondary, fontWeight: '600' },
+    cabChipTextActive: { color: colors.accent.primary },
+    formError: {
+      ...typography.caption,
+      color: colors.semantic.error,
+      marginTop: spacing.sm,
+      textAlign: 'center',
+    },
+    modalActions: {
+      flexDirection: 'row',
+      gap: spacing.md,
+      marginTop: spacing.lg,
+    },
+    modalBtn: {
+      flex: 1,
+      paddingVertical: spacing.md,
+      borderRadius: radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 48,
+    },
+    modalBtnPrimary: { backgroundColor: colors.accent.primary },
+    modalBtnPrimaryText: { ...typography.bodyMedium, color: colors.text.inverse, fontWeight: '700' },
+    modalBtnSecondary: {
+      backgroundColor: colors.bg.surface,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    modalBtnSecondaryText: { ...typography.bodyMedium, color: colors.text.secondary, fontWeight: '600' },
   });

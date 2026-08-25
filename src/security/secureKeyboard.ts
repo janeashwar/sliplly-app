@@ -281,7 +281,7 @@ export class SecureKeyboard {
       // Ensure security props are not overridden
       secureTextEntry: secureConfig.secureTextEntry,
       autoComplete: secureConfig.autoComplete,
-      textContentType: secureConfig.textContentType,
+      textContentType: secureConfig.textContentType as TextInputProps['textContentType'],
       autoCorrect: secureConfig.autoCorrect,
       spellCheck: secureConfig.spellCheck,
     };

@@ -11,17 +11,13 @@ import {
   StyleSheet,
   Pressable,
   Dimensions,
-  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 import { useRouter, usePathname } from 'expo-router';
 import { useTheme } from '../context/ThemeContext';
@@ -39,8 +35,13 @@ const PILL_PADDING = 5;
 const PILL_GAP = 8;
 const FAB_SIZE = 48;
 const TAB_COUNT = 3;
-const GRADIENT_HEIGHT = 160;
 const BOTTOM_OFFSET = 12;
+
+// Solid opaque surfaces (no blur / no transparency)
+const SURFACE_DARK = '#1C1C1E';
+const SURFACE_LIGHT = '#FFFFFF';
+const BORDER_DARK = '#323234';
+const BORDER_LIGHT = '#E3E3E8';
 
 // Tab width calculation - use full pill width divided by 3
 const PILL_WIDTH = SCREEN_WIDTH - (BAR_MARGIN * 2) - SIDE_BUTTON_SIZE - FAB_SIZE - (PILL_GAP * 2);
@@ -73,7 +74,8 @@ function getTabIndex(routeName: string): number {
 function DrawerButton({ isDark }: { isDark: boolean }) {
   const { openDrawer } = useDrawer();
   const scale = useSharedValue(1);
-  const borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+  const surfaceColor = isDark ? SURFACE_DARK : SURFACE_LIGHT;
+  const borderColor = isDark ? BORDER_DARK : BORDER_LIGHT;
   // Use same colors as nav bar icons
   const iconColor = isDark ? '#FFFFFF' : '#1A1A1A';
 
@@ -88,22 +90,8 @@ function DrawerButton({ isDark }: { isDark: boolean }) {
   return (
     <Animated.View style={animStyle}>
       <Pressable onPressIn={handlePressIn} onPressOut={handlePressOut}>
-        <View style={[styles.sideButton, { borderColor }]}>
-          {/* LAYER 1: Empty BlurView */}
-          <BlurView
-            intensity={isDark ? 15 : 40}
-            tint={isDark ? 'dark' : 'light'}
-            experimentalBlurMethod="dimezisBlurView"
-            style={StyleSheet.absoluteFill}
-          />
-          {/* LAYER 2: Content in separate hardware layer */}
-          <View 
-            style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', zIndex: 10 }]} 
-            collapsable={false}
-            pointerEvents="box-none"
-          >
-            <Ionicons name="menu-outline" size={20} color={iconColor} />
-          </View>
+        <View style={[styles.sideButton, { backgroundColor: surfaceColor, borderColor }]}>
+          <Ionicons name="menu-outline" size={20} color={iconColor} />
         </View>
       </Pressable>
     </Animated.View>
@@ -114,7 +102,8 @@ function DrawerButton({ isDark }: { isDark: boolean }) {
 function AddButton({ isDark, isBookingPage, onNavigate }: { isDark: boolean; isBookingPage: boolean; onNavigate: (route: string) => void }) {
   const scale = useSharedValue(1);
   const rotation = useSharedValue(isBookingPage ? 45 : 0);
-  const borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+  const surfaceColor = isDark ? SURFACE_DARK : SURFACE_LIGHT;
+  const borderColor = isDark ? BORDER_DARK : BORDER_LIGHT;
 
   useEffect(() => {
     rotation.value = withSpring(isBookingPage ? 45 : 0, SPRING.rotation);
@@ -140,20 +129,9 @@ function AddButton({ isDark, isBookingPage, onNavigate }: { isDark: boolean; isB
   return (
     <Animated.View style={buttonStyle}>
       <Pressable onPressIn={handlePressIn} onPressOut={handlePressOut}>
-        <View style={[styles.sideButton, { borderColor }]}>
-          {/* LAYER 1: Blur background - stays in place */}
-          <BlurView
-            intensity={isDark ? 15 : 40}
-            tint={isDark ? 'dark' : 'light'}
-            experimentalBlurMethod="dimezisBlurView"
-            style={StyleSheet.absoluteFill}
-          />
-          {/* LAYER 2: Icon - rotates independently */}
-          <Animated.View 
-            style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', zIndex: 10 }, iconStyle]} 
-            collapsable={false}
-            pointerEvents="box-none"
-          >
+        <View style={[styles.sideButton, { backgroundColor: surfaceColor, borderColor }]}>
+          {/* Icon rotates independently of the button scale */}
+          <Animated.View style={[styles.iconLayer, iconStyle]}>
             <Ionicons name="add-outline" size={20} color={isDark ? '#4ADE80' : '#2D8A5E'} />
           </Animated.View>
         </View>
@@ -238,56 +216,25 @@ export default function PremiumBottomNav() {
     opacity: navBarOpacity.value,
   }));
 
-  // Gradient fade animation for booking page (separate from nav bar)
-  const gradientOpacity = useSharedValue(1);
-  useEffect(() => {
-    gradientOpacity.value = withTiming(
-      isBookingPage ? 0 : 1,
-      { duration: 300 }
-    );
-  }, [isBookingPage]);
-
-  const gradientStyle = useAnimatedStyle(() => ({
-    opacity: gradientOpacity.value,
-  }));
-
-  // Gradient colors - always show, but animate opacity
-  const gradientColors: [string, string, string, string, string, string] = isDark
-    ? ['transparent', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.85)']
-    : ['transparent', 'rgba(0,0,0,0.02)', 'rgba(0,0,0,0.05)', 'rgba(0,0,0,0.08)', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.18)'];
-
   const activeColor = isDark ? '#FFFFFF' : '#1C1C1E';
-  const inactiveColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(28,28,30,0.4)';
+  const inactiveColor = isDark ? '#98989F' : '#8E8E93';
   // Slider colors - premium for each theme
   const sliderBg = isDark ? '#2A2A2A' : '#FEFEFE';
+  // Pill surface + border - solid opaque
+  const pillBg = isDark ? SURFACE_DARK : SURFACE_LIGHT;
+  const pillBorderColor = isDark ? BORDER_DARK : BORDER_LIGHT;
 
   return (
     <View style={styles.container}>
-      {/* Gradient from screen bottom - fades on booking page */}
-      <Animated.View style={[styles.gradient, { height: insets.bottom + GRADIENT_HEIGHT }, { opacity: isBookingPage ? 0 : 1 }]}>
-        <LinearGradient
-          colors={gradientColors}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-      </Animated.View>
-
       {/* Navigation bar + drawer - fades on booking page */}
       <Animated.View style={[styles.navBar, { bottom: insets.bottom + BOTTOM_OFFSET }, navBarStyle]}>
         {/* Center: Pill (centered in container) */}
-        <View style={styles.pillWrapper}>
-          {/* Layer 1: Empty BlurView */}
-          <BlurView
-            intensity={isDark ? 15 : 40}
-            tint={isDark ? 'dark' : 'light'}
-            experimentalBlurMethod="dimezisBlurView"
-            style={StyleSheet.absoluteFill}
-          />
-          {/* Layer 2: Border */}
-          <View style={[styles.pillBorder, { borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]} />
-          {/* Layer 3: Opaque slider (blur won't show through) */}
-          <Animated.View style={[styles.slider, sliderStyle, { backgroundColor: sliderBg }]} />
-          {/* Layer 4: Tabs in separate hardware layer */}
+        <View style={[styles.pillWrapper, { backgroundColor: pillBg }]}>
+          {/* Opaque slider behind the tabs */}
+          <Animated.View style={[styles.slider, sliderStyle, { backgroundColor: sliderBg }]} collapsable={false} />
+          {/* Subtle border on top of the surface */}
+          <View style={[styles.pillBorder, { borderColor: pillBorderColor }]} />
+          {/* Tabs */}
           <View style={[styles.pillTabs, { zIndex: 10 }]} collapsable={false} pointerEvents="box-none">
             {TABS.map((tab) => {
               const isActive = getTabIndex(activeRouteName) === TABS.indexOf(tab);
@@ -337,13 +284,6 @@ const styles = StyleSheet.create({
     zIndex: 100,
     pointerEvents: 'box-none',
   },
-  gradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 1,
-  },
   navBar: {
     position: 'absolute',
     left: BAR_MARGIN,
@@ -374,11 +314,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  contentLayer: {
-    ...StyleSheet.absoluteFillObject,
+  iconLayer: {
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
   },
   sideButton: {
     width: SIDE_BUTTON_SIZE,
@@ -386,23 +324,14 @@ const styles = StyleSheet.create({
     borderRadius: SIDE_BUTTON_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
     borderWidth: 1,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 6 },
-      android: { elevation: 2 },
-      default: {},
-    }),
+    // NOTE: no elevation here — elevation + animated transforms causes
+    // black-box rendering artifacts on many Android GPUs
   },
   pillWrapper: {
     height: PILL_HEIGHT,
     borderRadius: PILL_HEIGHT / 2,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 8 },
-      android: { elevation: 3 },
-      default: {},
-    }),
+    // NOTE: no elevation / overflow:hidden here — same Android artifact class
   },
   pillBorder: {
     ...StyleSheet.absoluteFillObject,
@@ -418,19 +347,8 @@ const styles = StyleSheet.create({
     height: PILL_HEIGHT - (PILL_PADDING * 2),
     borderRadius: (PILL_HEIGHT - (PILL_PADDING * 2)) / 2,
     zIndex: 2,
-    // Premium shadow for light theme
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-      default: {},
-    }),
+    // NOTE: intentionally no shadow/elevation — animated scale/translate
+    // on elevated views triggers black rectangles on some Android devices
   },
   pillTabs: {
     flexDirection: 'row',

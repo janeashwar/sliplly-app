@@ -18,6 +18,8 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withTiming,
+  Easing,
 } from 'react-native-reanimated';
 import { useRouter, usePathname } from 'expo-router';
 import { useTheme } from '../context/ThemeContext';
@@ -162,45 +164,36 @@ export default function PremiumBottomNav() {
   
   // Slider animation - keep position when on booking page
   const sliderX = useSharedValue(getTabIndex(activeRouteName));
-  const sliderScaleX = useSharedValue(1);
-  const sliderScaleY = useSharedValue(1);
   const lastTabIndex = useRef(getTabIndex(activeRouteName));
   
   useEffect(() => {
     const newIndex = getTabIndex(activeRouteName);
-    // Only update slider for main tabs, not booking
+    // Smooth slide to the new tab — no squash/timeout tricks (they flicker)
     if (activeRouteName !== 'booking') {
-      // Stretch horizontally, squeeze vertically
-      sliderScaleX.value = withSpring(1.15, { stiffness: 400, damping: 15, mass: 0.5 });
-      sliderScaleY.value = withSpring(0.85, { stiffness: 400, damping: 15, mass: 0.5 });
-      
-      setTimeout(() => {
-        // Return to normal
-        sliderScaleX.value = withSpring(1, { stiffness: 300, damping: 20, mass: 0.8 });
-        sliderScaleY.value = withSpring(1, { stiffness: 300, damping: 20, mass: 0.8 });
-      }, 100);
-      
       lastTabIndex.current = newIndex;
     }
-    sliderX.value = withSpring(lastTabIndex.current, SPRING.slider);
+    sliderX.value = withTiming(lastTabIndex.current, {
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+    });
   }, [activeRouteName]);
 
   const sliderStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: sliderX.value * TAB_WIDTH },
-      { scaleX: sliderScaleX.value },
-      { scaleY: sliderScaleY.value },
     ],
   }));
 
   const handleTabPress = useCallback((tabName: TabName) => {
     hapticTap();
-    router.push(`/(tabs)/${tabName}`);
+    // navigate (not push) — push creates a NEW screen instance on every tap,
+    // remounting the whole tab (0.5s rebuild + replayed animations)
+    router.navigate(`/(tabs)/${tabName}`);
   }, [router]);
 
   const handleNavigate = useCallback((route: string) => {
     if (route === 'back') router.back();
-    else router.push(`/(tabs)/${route}`);
+    else router.navigate(`/(tabs)/${route}`);
   }, [router]);
 
   // Nav bar fade animation for booking page

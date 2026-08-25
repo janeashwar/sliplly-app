@@ -143,7 +143,8 @@ export default function Drawer() {
     } else if (item.route) {
       // Small delay to let drawer close first
       setTimeout(() => {
-        router.push(item.route as any);
+        // navigate — for tab routes this switches without remounting
+        router.navigate(item.route as any);
       }, 100);
     }
   };

@@ -43,7 +43,8 @@ function SwipeableTabContent({ children }: { children: React.ReactNode }) {
     (direction: 'left' | 'right') => {
       const newIndex = direction === 'left' ? currentIndex + 1 : currentIndex - 1;
       if (newIndex >= 0 && newIndex < TAB_ORDER.length) {
-        router.push(`/(tabs)/${TAB_ORDER[newIndex]}`);
+        // navigate, not push — avoids remounting the tab screen
+        router.navigate(`/(tabs)/${TAB_ORDER[newIndex]}`);
       }
     },
     [currentIndex, router]
